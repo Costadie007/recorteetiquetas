@@ -4,7 +4,6 @@ from datetime import datetime
 
 import cv2
 from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.responses import Response
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
@@ -17,12 +16,6 @@ description="API para receber fotos, realizar o recorte automático das etiqueta
 version="2.0.0"
 )
 
-# =========================================================
-
-# CONFIGURAÇÕES DO GOOGLE DRIVE
-
-# =========================================================
-
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN")
@@ -30,11 +23,9 @@ GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
 
 def obter_servico_google_drive():
 """
-Cria uma conexão autenticada com o Google Drive
-utilizando o Refresh Token armazenado no Render.
+Cria uma conexão autenticada com o Google Drive.
 """
 
-```
 if not GOOGLE_CLIENT_ID:
     raise Exception("GOOGLE_CLIENT_ID não configurado.")
 
@@ -65,18 +56,13 @@ servico = build(
 )
 
 return servico
-```
 
-def salvar_no_google_drive(
-imagem_png,
-nome_arquivo
-):
+def salvar_no_google_drive(imagem_png, nome_arquivo):
 """
 Envia a imagem PNG para a pasta configurada
 no Google Drive.
 """
 
-```
 servico = obter_servico_google_drive()
 
 arquivo_metadata = {
@@ -105,13 +91,6 @@ arquivo = (
 )
 
 return arquivo
-```
-
-# =========================================================
-
-# ROTAS BÁSICAS
-
-# =========================================================
 
 @app.get("/")
 def inicio():
@@ -126,23 +105,14 @@ return {
 "status": "ok"
 }
 
-# =========================================================
-
-# RECORTE
-
-# =========================================================
-
 @app.post("/api/recortar")
-async def recortar_etiqueta(
-arquivo: UploadFile = File(...)
-):
+async def recortar_etiqueta(arquivo: UploadFile = File(...)):
 """
 Recebe uma imagem, executa o algoritmo de recorte,
 salva o melhor recorte no Google Drive e retorna
 informações sobre o arquivo salvo.
 """
 
-```
 tipos_permitidos = [
     "image/jpeg",
     "image/jpg",
@@ -157,7 +127,6 @@ if arquivo.content_type not in tipos_permitidos:
 
 try:
     imagem_bytes = await arquivo.read()
-
 except Exception:
     raise HTTPException(
         status_code=400,
@@ -170,15 +139,10 @@ if not imagem_bytes:
         detail="A imagem enviada está vazia."
     )
 
-# -----------------------------------------------------
-# PROCESSAMENTO DA IMAGEM
-# -----------------------------------------------------
-
 try:
     candidatos = extrair_candidatos_etiqueta(
         imagem_bytes
     )
-
 except Exception as erro:
     raise HTTPException(
         status_code=500,
@@ -195,10 +159,6 @@ melhor_candidato = candidatos[0]
 
 imagem_recortada = melhor_candidato["imagem"]
 confianca = melhor_candidato["confianca"]
-
-# -----------------------------------------------------
-# CONVERTER O RECORTE PARA PNG
-# -----------------------------------------------------
 
 try:
     imagem_bgr = cv2.cvtColor(
@@ -224,37 +184,22 @@ except Exception as erro:
         detail=f"Erro ao gerar imagem recortada: {str(erro)}"
     )
 
-# -----------------------------------------------------
-# NOME DO ARQUIVO
-# -----------------------------------------------------
-
 data_hora = datetime.now().strftime(
     "%Y%m%d_%H%M%S_%f"
 )
 
-nome_arquivo = (
-    f"etiqueta_{data_hora}.png"
-)
-
-# -----------------------------------------------------
-# GOOGLE DRIVE
-# -----------------------------------------------------
+nome_arquivo = f"etiqueta_{data_hora}.png"
 
 try:
     arquivo_drive = salvar_no_google_drive(
         imagem_png,
         nome_arquivo
     )
-
 except Exception as erro:
     raise HTTPException(
         status_code=500,
         detail=f"Erro ao salvar no Google Drive: {str(erro)}"
     )
-
-# -----------------------------------------------------
-# RESPOSTA
-# -----------------------------------------------------
 
 return {
     "status": "sucesso",
@@ -265,4 +210,3 @@ return {
     "confianca": confianca,
     "quantidade_candidatos": len(candidatos)
 }
-```
