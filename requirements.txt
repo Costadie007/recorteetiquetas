@@ -3,3 +3,6 @@ opencv-python-headless
 numpy
 pytesseract
 ultralytics
+fastapi
+uvicorn
+python-multipart
