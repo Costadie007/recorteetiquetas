@@ -17,39 +17,77 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN")
 GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
 
+
 def obter_servico_google_drive():
-   if not all([GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GOOGLE_DRIVE_FOLDER_ID]): raise Exception("As variáveis do Google Drive não estão configuradas no Render.")
-credenciais = Credentials(token=None, refresh_token=GOOGLE_REFRESH_TOKEN, token_uri="https://oauth2.googleapis.com/token", client_id=GOOGLE_CLIENT_ID, client_secret=GOOGLE_CLIENT_SECRET, scopes=["https://www.googleapis.com/auth/drive.file"])
-return build("drive", "v3", credentials=credenciais)
+    if not all([
+        GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_SECRET,
+        GOOGLE_REFRESH_TOKEN,
+        GOOGLE_DRIVE_FOLDER_ID,
+    ]):
+        raise Exception("As variáveis do Google Drive não estão configuradas no Render.")
+
+    credenciais = Credentials(
+        token=None,
+        refresh_token=GOOGLE_REFRESH_TOKEN,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        scopes=["https://www.googleapis.com/auth/drive.file"],
+    )
+    return build("drive", "v3", credentials=credenciais)
+
 
 def salvar_no_google_drive(imagem_png, nome_arquivo):
-servico = obter_servico_google_drive()
-metadata = {"name": nome_arquivo, "parents": [GOOGLE_DRIVE_FOLDER_ID]}
-media = MediaIoBaseUpload(io.BytesIO(imagem_png), mimetype="image/png", resumable=False)
-return servico.files().create(body=metadata, media_body=media, fields="id,name,webViewLink").execute()
+    servico = obter_servico_google_drive()
+    metadata = {"name": nome_arquivo, "parents": [GOOGLE_DRIVE_FOLDER_ID]}
+    media = MediaIoBaseUpload(io.BytesIO(imagem_png), mimetype="image/png", resumable=False)
+    return servico.files().create(body=metadata, media_body=media, fields="id,name,webViewLink").execute()
+
 
 @app.get("/")
-def inicio(): return {"status": "online", "mensagem": "API Recorte de Etiquetas funcionando"}
+def inicio():
+    return {"status": "online", "mensagem": "API Recorte de Etiquetas funcionando"}
+
 
 @app.get("/api/health")
-def health(): return {"status": "ok"}
+def health():
+    return {"status": "ok"}
+
 
 @app.post("/api/recortar")
 async def recortar_etiqueta(arquivo: UploadFile = File(...)):
-tipos_permitidos = ["image/jpeg", "image/jpg", "image/png"]
-if arquivo.content_type not in tipos_permitidos: raise HTTPException(status_code=400, detail="Envie uma imagem JPG ou PNG.")
-imagem_bytes = await arquivo.read()
-if not imagem_bytes: raise HTTPException(status_code=400, detail="A imagem enviada está vazia.")
-candidatos = extrair_candidatos_etiqueta(imagem_bytes)
-if not candidatos: raise HTTPException(status_code=404, detail="Nenhuma etiqueta foi encontrada na imagem.")
-imagem_recortada = candidatos[0]["imagem"]
-confianca = candidatos[0]["confianca"]
-imagem_bgr = cv2.cvtColor(imagem_recortada, cv2.COLOR_RGB2BGR)
-sucesso, buffer = cv2.imencode(".png", imagem_bgr)
-if not sucesso: raise HTTPException(status_code=500, detail="Não foi possível gerar o PNG.")
-nome_arquivo = "etiqueta_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".png"
-try:
-arquivo_drive = salvar_no_google_drive(buffer.tobytes(), nome_arquivo)
-except Exception as erro:
-raise HTTPException(status_code=500, detail="Erro ao salvar no Google Drive: " + str(erro))
-return {"status": "sucesso", "mensagem": "Etiqueta recortada e salva no Google Drive.", "nome_arquivo": arquivo_drive.get("name"), "arquivo_id": arquivo_drive.get("id"), "link": arquivo_drive.get("webViewLink"), "confianca": confianca, "quantidade_candidatos": len(candidatos)}
+    tipos_permitidos = ["image/jpeg", "image/jpg", "image/png"]
+    if arquivo.content_type not in tipos_permitidos:
+        raise HTTPException(status_code=400, detail="Envie uma imagem JPG ou PNG.")
+
+    imagem_bytes = await arquivo.read()
+    if not imagem_bytes:
+        raise HTTPException(status_code=400, detail="A imagem enviada está vazia.")
+
+    candidatos = extrair_candidatos_etiqueta(imagem_bytes)
+    if not candidatos:
+        raise HTTPException(status_code=404, detail="Nenhuma etiqueta foi encontrada na imagem.")
+
+    imagem_recortada = candidatos[0]["imagem"]
+    confianca = candidatos[0]["confianca"]
+    imagem_bgr = cv2.cvtColor(imagem_recortada, cv2.COLOR_RGB2BGR)
+    sucesso, buffer = cv2.imencode(".png", imagem_bgr)
+    if not sucesso:
+        raise HTTPException(status_code=500, detail="Não foi possível gerar o PNG.")
+
+    nome_arquivo = "etiqueta_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".png"
+    try:
+        arquivo_drive = salvar_no_google_drive(buffer.tobytes(), nome_arquivo)
+    except Exception as erro:
+        raise HTTPException(status_code=500, detail="Erro ao salvar no Google Drive: " + str(erro))
+
+    return {
+        "status": "sucesso",
+        "mensagem": "Etiqueta recortada e salva no Google Drive.",
+        "nome_arquivo": arquivo_drive.get("name"),
+        "arquivo_id": arquivo_drive.get("id"),
+        "link": arquivo_drive.get("webViewLink"),
+        "confianca": confianca,
+        "quantidade_candidatos": len(candidatos),
+    }
