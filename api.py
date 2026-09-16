@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 
 import cv2
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, Request, HTTPException
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
@@ -13,7 +13,7 @@ from processamento import extrair_candidatos_etiqueta
 
 app = FastAPI(
     title="API Recorte de Etiquetas",
-    version="2.0.0"
+    version="2.1.0"
 )
 
 
@@ -99,30 +99,15 @@ def health():
 
 
 @app.post("/api/recortar")
-async def recortar_etiqueta(
-    arquivo: UploadFile = File(...)
-):
+async def recortar_etiqueta(request: Request):
 
-    tipos_permitidos = [
-        "image/jpeg",
-        "image/jpg",
-        "image/png"
-    ]
-
-    if arquivo.content_type not in tipos_permitidos:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Envie uma imagem JPG ou PNG."
-        )
-
-    imagem_bytes = await arquivo.read()
+    imagem_bytes = await request.body()
 
     if not imagem_bytes:
 
         raise HTTPException(
             status_code=400,
-            detail="A imagem enviada está vazia."
+            detail="Nenhuma imagem foi recebida."
         )
 
     candidatos = extrair_candidatos_etiqueta(
