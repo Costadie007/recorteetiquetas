@@ -1,3 +1,5 @@
+import os
+
 import cv2
 import numpy as np
 
@@ -8,23 +10,43 @@ except Exception:
     YOLO_DISPONIVEL = False
 
 
+MODELO_YOLO = None
+MODELO_CARREGADO = False
+
+
 def carregar_modelo_yolo():
     """
-    Carrega o modelo YOLO utilizado pelo projeto.
+    Carrega o modelo YOLO uma única vez.
+
+    Depois que o modelo for carregado,
+    ele permanece em memória e é reutilizado
+    nas próximas imagens.
     """
+
+    global MODELO_YOLO
+    global MODELO_CARREGADO
+
+    if MODELO_CARREGADO:
+        return MODELO_YOLO
+
+    MODELO_CARREGADO = True
+
     if not YOLO_DISPONIVEL:
+        MODELO_YOLO = None
         return None
 
     try:
-        import os
 
         if os.path.exists("best.pt"):
-            return YOLO("best.pt")
-
-        return YOLO("yolov8n.pt")
+            MODELO_YOLO = YOLO("best.pt")
+        else:
+            MODELO_YOLO = YOLO("yolov8n.pt")
 
     except Exception:
-        return None
+
+        MODELO_YOLO = None
+
+    return MODELO_YOLO
 
 
 def extrair_candidatos_etiqueta(imagem_bytes):
@@ -33,16 +55,27 @@ def extrair_candidatos_etiqueta(imagem_bytes):
     de possíveis recortes de etiquetas.
 
     Cada candidato possui:
-        - imagem: imagem RGB recortada
-        - confianca: confiança da detecção
+
+        imagem:
+            imagem RGB recortada
+
+        confianca:
+            confiança da detecção
     """
 
     # ---------------------------------------------------------
     # 1. CONVERTER BYTES PARA IMAGEM
     # ---------------------------------------------------------
 
-    array_imagem = np.frombuffer(imagem_bytes, np.uint8)
-    img_bgr = cv2.imdecode(array_imagem, cv2.IMREAD_COLOR)
+    array_imagem = np.frombuffer(
+        imagem_bytes,
+        np.uint8
+    )
+
+    img_bgr = cv2.imdecode(
+        array_imagem,
+        cv2.IMREAD_COLOR
+    )
 
     if img_bgr is None:
         return []
@@ -60,6 +93,7 @@ def extrair_candidatos_etiqueta(imagem_bytes):
     if modelo is not None:
 
         try:
+
             resultados = modelo(
                 img_bgr,
                 conf=0.25,
@@ -77,7 +111,10 @@ def extrair_candidatos_etiqueta(imagem_bytes):
                 for box in resultado.boxes:
 
                     try:
-                        conf = float(box.conf[0])
+
+                        conf = float(
+                            box.conf[0]
+                        )
 
                         x1, y1, x2, y2 = map(
                             int,
@@ -85,36 +122,45 @@ def extrair_candidatos_etiqueta(imagem_bytes):
                         )
 
                         deteccoes.append(
-                            (conf, x1, y1, x2, y2)
+                            (
+                                conf,
+                                x1,
+                                y1,
+                                x2,
+                                y2
+                            )
                         )
 
                     except Exception:
                         continue
-
-            # -------------------------------------------------
-            # 3. ORDENAR PELA MAIOR CONFIANÇA
-            # -------------------------------------------------
 
             deteccoes.sort(
                 key=lambda item: item[0],
                 reverse=True
             )
 
-            # -------------------------------------------------
-            # 4. CRIAR OS RECORTES
-            # -------------------------------------------------
-
             for conf, x1, y1, x2, y2 in deteccoes:
 
                 largura_caixa = x2 - x1
                 altura_caixa = y2 - y1
 
-                # 4% de margem
-                margem_x = int(largura_caixa * 0.04)
-                margem_y = int(altura_caixa * 0.04)
+                margem_x = int(
+                    largura_caixa * 0.04
+                )
 
-                x1_final = max(0, x1 - margem_x)
-                y1_final = max(0, y1 - margem_y)
+                margem_y = int(
+                    altura_caixa * 0.04
+                )
+
+                x1_final = max(
+                    0,
+                    x1 - margem_x
+                )
+
+                y1_final = max(
+                    0,
+                    y1 - margem_y
+                )
 
                 x2_final = min(
                     largura_original,
@@ -139,27 +185,29 @@ def extrair_candidatos_etiqueta(imagem_bytes):
                     cv2.COLOR_BGR2RGB
                 )
 
-                candidatos.append({
-                    "imagem": crop_rgb,
-                    "confianca": conf
-                })
+                candidatos.append(
+                    {
+                        "imagem": crop_rgb,
+                        "confianca": conf
+                    }
+                )
 
         except Exception:
             pass
 
     # ---------------------------------------------------------
-    # 5. FALLBACK OPENCV
+    # 3. FALLBACK OPENCV
     # ---------------------------------------------------------
 
     if not candidatos:
 
         try:
+
             gray = cv2.cvtColor(
                 img_bgr,
                 cv2.COLOR_BGR2GRAY
             )
 
-            # CLAHE
             clahe = cv2.createCLAHE(
                 clipLimit=2.0,
                 tileGridSize=(8, 8)
@@ -167,7 +215,6 @@ def extrair_candidatos_etiqueta(imagem_bytes):
 
             gray = clahe.apply(gray)
 
-            # Gradiente morfológico
             kernel = cv2.getStructuringElement(
                 cv2.MORPH_RECT,
                 (25, 7)
@@ -179,7 +226,6 @@ def extrair_candidatos_etiqueta(imagem_bytes):
                 kernel
             )
 
-            # Threshold Otsu
             _, threshold = cv2.threshold(
                 gradient,
                 0,
@@ -187,7 +233,6 @@ def extrair_candidatos_etiqueta(imagem_bytes):
                 cv2.THRESH_BINARY + cv2.THRESH_OTSU
             )
 
-            # Fechamento morfológico
             kernel_close = cv2.getStructuringElement(
                 cv2.MORPH_RECT,
                 (25, 7)
@@ -199,7 +244,6 @@ def extrair_candidatos_etiqueta(imagem_bytes):
                 kernel_close
             )
 
-            # Encontrar contornos
             contornos, _ = cv2.findContours(
                 threshold,
                 cv2.RETR_EXTERNAL,
@@ -207,12 +251,15 @@ def extrair_candidatos_etiqueta(imagem_bytes):
             )
 
             area_original = (
-                largura_original * altura_original
+                largura_original *
+                altura_original
             )
 
             for contorno in contornos:
 
-                x, y, w, h = cv2.boundingRect(contorno)
+                x, y, w, h = cv2.boundingRect(
+                    contorno
+                )
 
                 if h <= 0:
                     continue
@@ -221,10 +268,14 @@ def extrair_candidatos_etiqueta(imagem_bytes):
 
                 area = w * h
 
-                proporcao_area = area / area_original
+                proporcao_area = (
+                    area / area_original
+                )
 
-                # Filtros originais
-                if proporcao < 1.5 or proporcao > 6.0:
+                if proporcao < 1.5:
+                    continue
+
+                if proporcao > 6.0:
                     continue
 
                 if proporcao_area < 0.008:
@@ -233,9 +284,15 @@ def extrair_candidatos_etiqueta(imagem_bytes):
                 if proporcao_area > 0.70:
                     continue
 
-                # Margem de 15 pixels
-                x1 = max(0, x - 15)
-                y1 = max(0, y - 15)
+                x1 = max(
+                    0,
+                    x - 15
+                )
+
+                y1 = max(
+                    0,
+                    y - 15
+                )
 
                 x2 = min(
                     largura_original,
@@ -260,16 +317,18 @@ def extrair_candidatos_etiqueta(imagem_bytes):
                     cv2.COLOR_BGR2RGB
                 )
 
-                candidatos.append({
-                    "imagem": crop_rgb,
-                    "confianca": 0.5
-                })
+                candidatos.append(
+                    {
+                        "imagem": crop_rgb,
+                        "confianca": 0.5
+                    }
+                )
 
         except Exception:
             pass
 
     # ---------------------------------------------------------
-    # 6. ORDENAR RESULTADOS
+    # 4. ORDENAR RESULTADOS
     # ---------------------------------------------------------
 
     candidatos.sort(
