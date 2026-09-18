@@ -1,4 +1,3 @@
-
 import io
 import os
 from datetime import datetime
@@ -35,6 +34,29 @@ os.makedirs(
     PASTA_RECORTES,
     exist_ok=True
 )
+
+# Quantidade máxima de recortes mantidos na pasta temporária.
+# Os arquivos mais antigos são apagados automaticamente.
+LIMITE_RECORTES = 20
+
+
+def limpar_recortes_antigos():
+    """Mantém apenas os recortes mais recentes na pasta temporária."""
+    try:
+        arquivos = [
+            os.path.join(PASTA_RECORTES, nome)
+            for nome in os.listdir(PASTA_RECORTES)
+        ]
+        arquivos = [c for c in arquivos if os.path.isfile(c)]
+        arquivos.sort(key=os.path.getmtime, reverse=True)
+
+        for caminho in arquivos[LIMITE_RECORTES:]:
+            try:
+                os.remove(caminho)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 # ============================================================
@@ -74,8 +96,9 @@ def obter_servico_google_drive():
 
 
 def salvar_no_google_drive(
-    imagem_png,
-    nome_arquivo
+    imagem_arquivo,
+    nome_arquivo,
+    mimetype
 ):
 
     servico = obter_servico_google_drive()
@@ -88,8 +111,8 @@ def salvar_no_google_drive(
     }
 
     media = MediaIoBaseUpload(
-        io.BytesIO(imagem_png),
-        mimetype="image/png",
+        io.BytesIO(imagem_arquivo),
+        mimetype=mimetype,
         resumable=False
     )
 
@@ -122,6 +145,7 @@ def health():
         "status": "ok"
     }
 
+
 @app.get("/debug/memoria")
 def debug_memoria():
     with open("/proc/self/status") as f:
@@ -129,6 +153,7 @@ def debug_memoria():
             if linha.startswith("VmRSS:"):
                 return {"rss_mb": round(int(linha.split()[1]) / 1024, 1)}
     return {"rss_mb": None}
+
 
 # ============================================================
 # ROTA PARA EXIBIR O RECORTE NO CELULAR
@@ -153,7 +178,7 @@ def obter_recorte(
 
     return FileResponse(
         caminho,
-        media_type="image/png",
+        media_type="image/jpeg",
         filename=nome_arquivo
     )
 
@@ -217,23 +242,24 @@ async def recortar_etiqueta(
 
 
     # --------------------------------------------------------
-    # CONVERTE PARA PNG
+    # CONVERTE PARA JPEG
     # --------------------------------------------------------
 
     sucesso, buffer = cv2.imencode(
-        ".png",
-        imagem_bgr
+        ".jpg",
+        imagem_bgr,
+        [int(cv2.IMWRITE_JPEG_QUALITY), 92],
     )
 
     if not sucesso:
 
         raise HTTPException(
             status_code=500,
-            detail="Não foi possível gerar o PNG."
+            detail="Não foi possível gerar o JPEG."
         )
 
 
-    imagem_png = buffer.tobytes()
+    imagem_arquivo = buffer.tobytes()
 
 
     # --------------------------------------------------------
@@ -245,7 +271,7 @@ async def recortar_etiqueta(
         + datetime.now().strftime(
             "%Y%m%d_%H%M%S_%f"
         )
-        + ".png"
+        + ".jpg"
     )
 
 
@@ -267,7 +293,7 @@ async def recortar_etiqueta(
         ) as arquivo:
 
             arquivo.write(
-                imagem_png
+                imagem_arquivo
             )
 
     except Exception as erro:
@@ -281,6 +307,10 @@ async def recortar_etiqueta(
             )
         )
 
+    # Remove recortes antigos para não acumular
+    # arquivos indefinidamente na pasta temporária.
+    limpar_recortes_antigos()
+
 
     # --------------------------------------------------------
     # SALVA A MESMA IMAGEM NO GOOGLE DRIVE
@@ -289,8 +319,9 @@ async def recortar_etiqueta(
     try:
 
         arquivo_drive = salvar_no_google_drive(
-            imagem_png,
-            nome_arquivo
+            imagem_arquivo,
+            nome_arquivo,
+            "image/jpeg"
         )
 
     except Exception as erro:
@@ -362,4 +393,3 @@ async def recortar_etiqueta(
             candidatos
         )
     }
-
