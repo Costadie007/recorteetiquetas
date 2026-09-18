@@ -1,9 +1,10 @@
 import io
 import os
+import secrets
 from datetime import datetime
 
 import cv2
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Header, Depends
 from fastapi.responses import FileResponse
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -22,6 +23,30 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN")
 GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
+
+# Chave que o app precisa enviar no header X-API-Key
+# para poder usar o /api/recortar.
+API_KEY = os.getenv("API_KEY")
+
+
+def verificar_api_key(
+    x_api_key: str = Header(default=None)
+):
+    """Bloqueia o acesso se a chave enviada não bater com a configurada."""
+
+    if not API_KEY:
+        # Se a variável não foi configurada no Render, a rota
+        # fica bloqueada por segurança, em vez de aberta por acidente.
+        raise HTTPException(
+            status_code=500,
+            detail="API_KEY não configurada no servidor."
+        )
+
+    if not x_api_key or not secrets.compare_digest(x_api_key, API_KEY):
+        raise HTTPException(
+            status_code=401,
+            detail="Chave de API inválida ou ausente."
+        )
 
 
 # ============================================================
@@ -187,7 +212,10 @@ def obter_recorte(
 # PROCESSAMENTO DA ETIQUETA
 # ============================================================
 
-@app.post("/api/recortar")
+@app.post(
+    "/api/recortar",
+    dependencies=[Depends(verificar_api_key)]
+)
 async def recortar_etiqueta(
     request: Request
 ):
