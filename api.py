@@ -122,6 +122,13 @@ def health():
         "status": "ok"
     }
 
+@app.get("/debug/memoria")
+def debug_memoria():
+    with open("/proc/self/status") as f:
+        for linha in f:
+            if linha.startswith("VmRSS:"):
+                return {"rss_mb": round(int(linha.split()[1]) / 1024, 1)}
+    return {"rss_mb": None}
 
 # ============================================================
 # ROTA PARA EXIBIR O RECORTE NO CELULAR
