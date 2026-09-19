@@ -28,6 +28,10 @@ GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
 # para poder usar o /api/recortar.
 API_KEY = os.getenv("API_KEY")
 
+# Abaixo desse valor, o app deve avisar o usuário para
+# conferir o recorte manualmente antes de confiar nele.
+LIMIAR_CONFIANCA_BAIXA = 0.5
+
 
 def verificar_api_key(
     x_api_key: str = Header(default=None)
@@ -416,6 +420,16 @@ async def recortar_etiqueta(
         "imagem_url": url_recorte,
 
         "confianca": confianca,
+
+        "metodo": candidatos[0].get(
+            "metodo",
+            "desconhecido"
+        ),
+
+        "confianca_baixa": (
+            confianca < LIMIAR_CONFIANCA_BAIXA
+            or candidatos[0].get("metodo") == "fallback"
+        ),
 
         "quantidade_candidatos": len(
             candidatos
