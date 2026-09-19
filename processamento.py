@@ -255,7 +255,7 @@ def fallback_opencv(img_bgr):
 
             if recorte is not None:
                 resultados.append(
-                    {"imagem": recorte, "confianca": 0.5}
+                    {"imagem": recorte, "confianca": 0.5, "metodo": "fallback"}
                 )
 
             if len(resultados) >= 3:
@@ -288,7 +288,7 @@ def extrair_candidatos_etiqueta(imagem_bytes):
             recorte = recortar_com_margem(img_bgr, x1, y1, x2, y2, MARGEM)
             if recorte is not None:
                 candidatos.append(
-                    {"imagem": recorte, "confianca": conf}
+                    {"imagem": recorte, "confianca": conf, "metodo": "yolo"}
                 )
     except Exception:
         pass
