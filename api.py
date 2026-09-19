@@ -33,6 +33,36 @@ API_KEY = os.getenv("API_KEY")
 LIMIAR_CONFIANCA_BAIXA = 0.5
 
 
+def validar_variaveis_obrigatorias():
+    """Impede o serviço de subir se faltar alguma configuração essencial."""
+
+    faltando = []
+
+    if not GOOGLE_CLIENT_ID:
+        faltando.append("GOOGLE_CLIENT_ID")
+
+    if not GOOGLE_CLIENT_SECRET:
+        faltando.append("GOOGLE_CLIENT_SECRET")
+
+    if not GOOGLE_REFRESH_TOKEN:
+        faltando.append("GOOGLE_REFRESH_TOKEN")
+
+    if not GOOGLE_DRIVE_FOLDER_ID:
+        faltando.append("GOOGLE_DRIVE_FOLDER_ID")
+
+    if not API_KEY:
+        faltando.append("API_KEY")
+
+    if faltando:
+        raise RuntimeError(
+            "Variáveis de ambiente obrigatórias não configuradas: "
+            + ", ".join(faltando)
+        )
+
+
+validar_variaveis_obrigatorias()
+
+
 def verificar_api_key(
     x_api_key: str = Header(default=None)
 ):
